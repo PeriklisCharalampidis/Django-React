@@ -1,0 +1,187 @@
+mkdir (creates a directory folder)
+echo. > steps.txt (creates a file)
+echo. > requirements.txt (creates a file)
+
+python -m venv venv (creates a virtual environment)
+venv\Scripts\activate (activates the virtual environment)
+code -a  . (opens fodler in vscode)
+pip install django (installs django) or
+
+python.exe -m pip install --upgrade pip
+
+python main.py  (run main.py file)
+
+pip install -r requirements.txt (installs all the packages in requirements.txt file)
+
+asgiref
+Django
+django-cors-headers (To Fix cross origin request issue)
+djangorestframework
+djangorestframework-simplejwt (Handle JWT Authentication)
+PyJWT
+pytz
+sqlparse
+psycopg2-binary (Working with postgresql)
+python-dotenv (to load environment variables)
+
+1. Create new Django Project
+django-admin startproject backend
+cd backend (Create App, where custom views and code is written!)
+python manage.py startapp api (Create a new app directory in backend folder) 
+
+2.backend Django settings
+
+from datetime import timedelta
+from dotenv import load_dotenv
+from os
+
+load_dotenv()
+-------------------------------------------------------------------------
+ALLOWED_HOSTS = ["*"]
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+}
+
+-------------------------------------------------------------------------
+"api",
+"rest_framework",
+"corsheaders",(to fix cross origin request issue)
+(Add to Installed Apps)
+-------------------------------------------------------------------------
+"corsheaders.middleware.CorsMiddleware",
+(middleware to fix cross origin request issue)
+-------------------------------------------------------------------------
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWS_CREDENTIALS = True
+(Typically you dont now allow all origins, I do it to avoid and roadblocks)
+-------------------------------------------------------------------------
+
+3. Move requirements.txt to backend directory
+Remember the env directory is outside of the backend directory
+-------------------------------------------------------------------------
+
+4.Create a folder serializers.py in the api directory
+What serializers is gonna do it is take a python object and convert it to JSON
+
+from django.contrib.auth.models import User
+from rest_framework import serializers
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'password']
+        extra_kwargs = {'password': {'write_only': True}}
+
+    def create(self, validated_data):
+        user = User.objects.create_user(**validated_data)
+        return user
+-------------------------------------------------------------------------
+5. Inside the  api/views.py I need to create a path to create a new user.
+
+from django.contrib.auth.models import User
+from rest_framework import generics
+from .serializers import UserSerializer
+from rest_framework.permissions import IsAuthenticated, AllowAny
+
+class CreateUserView(generics.CreateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    premission_classes = [AllowAny]
+-------------------------------------------------------------------------
+6.backend/urls.py
+from django.urls import path, include
+from api.views import CreateUserView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path("api/user/register/", CreateUserView.as_view(), name="register"),
+Link my register view
+    path("api/token/", TokenObtainPairView.as_view(), name="get_token"),
+Link TokenObtainPairView 
+    path("api/token/refresh/", TokenRefreshView.as_view(), name="refresh"),
+Link TokenRefreshView
+    path("api-auth/", include("rest_framework.urls")),
+Link all the prelinks urls that need from the rest frame work
+    ]
+--------------------------------------------------------------------------
+7. Migration to database
+
+python manage.py makemigrations
+
+This will create the file that specifies the Migrations that need to be performed.
+
+Next  do the actual migration 
+
+python manage.py migrate
+
+python manage.py runserver
+
+--------------------------------------------------------------------------
+8. Type Checking Fixes
+
+Fixed type checking issues in the Django models and views:
+
+a) In models.py:
+- Added proper type hint for __str__ method to return str
+- Updated Note model to use Django's BaseManager:
+
+from django.db import models
+from django.contrib.auth.models import User
+from django.db.models.manager import BaseManager
+
+class Note(models.Model):
+    _default_manager: BaseManager
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    author = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return str(self.title)
+
+b) In views.py:
+- Updated imports and type hints
+- Used _default_manager instead of objects for better type checking:
+
+from django.shortcuts import render
+from django.contrib.auth.models import User
+from rest_framework import generics
+from .serializers import UserSerializer, NoteSerializer
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from .models import Note
+from rest_framework import viewsets
+from rest_framework.response import Response
+from rest_framework import status
+from django.db.models import Model
+from typing import Any
+from django.db.models.manager import BaseManager
+
+class CreateUserView(generics.CreateAPIView):
+    queryset = User._default_manager.all()
+    serializer_class = UserSerializer
+    permission_classes = [AllowAny]
+
+class NoteViewSet(viewsets.ModelViewSet):
+    serializer_class = NoteSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self) -> Any:
+        # Only return notes created by the current user
+        return Note._default_manager.filter(author=self.request.user)
+
+These changes fix type checking issues while maintaining the same functionality:
+- Proper return type for __str__ method
+- Correct typing for Django's model manager
+- Compatible return types for DRF view methods
